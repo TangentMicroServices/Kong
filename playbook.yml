@@ -1,0 +1,98 @@
+- hosts: kong
+
+  vars:
+    list1: [1, 2, 3]
+    list2: [a, b, c, d]
+    microservices: [UserService, ProjectService, HoursService, LeaveService, LibraryService]
+  
+  tasks:
+    - name: Register all the APIs
+      kong_api:
+        kong_admin_uri: "{{kong_admin_base_url}}"     
+        name: "{{item.name}}"
+        upstream_url: "{{item.upstream_url}}"
+        request_host: "{{item.request_host}}"
+        request_path: "{{item.request_path}}"
+        strip_request_path: "{{item.strip_request_path}}"       
+        state: present
+      with_items:
+        # external APIs
+        - name: "Github"
+          upstream_url: "https://github.com"
+          request_host: "github.com"
+          request_path: "/github"
+          strip_request_path: yes
+
+        # microservices
+        - name: "UserService"
+          upstream_url: "http://userservice.{{kong_tld}}"
+          request_host: "userservice.tngnt.co"
+          request_path: "/userservice"
+          strip_request_path: yes
+
+        - name: "ProjectService"
+          upstream_url: "http://projectservice.{{kong_tld}}"
+          request_host: "projectservice.tngnt.co"
+          request_path: "/projectservice"
+          strip_request_path: yes
+
+        - name: "HoursService"
+          upstream_url: "http://hoursservice.{{kong_tld}}"
+          request_host: "hoursservice.tngnt.co"
+          request_path: "/hoursservice"
+          strip_request_path: yes
+
+        - name: "LeaveService"
+          upstream_url: "http://leaveservice.{{kong_tld}}"
+          request_host: "leaveservice.tngnt.co"
+          request_path: "/leaveservice"
+          strip_request_path: yes
+
+        - name: "LibraryService"
+          upstream_url: "http://libraryservice.{{kong_tld}}"
+          request_host: "libraryservice.tngnt.co"
+          request_path: "/libraryservice"
+          strip_request_path: yes
+
+#    - name: Printing message
+#      debug: msg="Values are {{item[0]}} and {{item[1]}}"
+#      with_nested:
+#        - list1
+#        - list2
+
+    - name: Configure common plugins for all services
+      kong_plugin:
+        kong_admin_uri: "{{kong_admin_base_url}}"
+        plugin_name: "{{item[1].name}}"        
+        api_name: "{{item[0]}}"
+        config: "{{item[1].config}}"
+      with_nested:
+        - "{{microservices}}"
+        - [
+            {"name": "cors", "config":{}},
+            {"name": "rate-limiting", 
+             "config": {
+                "config.second": 5, 
+                "config.hour": 10000
+              }
+            }
+          ]
+
+    # todo: actually get this from the user-service
+    - name: Create consumers for all employees
+      kong_consumer: 
+        kong_admin_uri: "{{kong_admin_base_url}}"
+        username: "{{item.username}}"
+        custom_id: "{{item.custom_id}}"
+      with_items:
+        - username: "christo.crampton"
+          custom_id: 1
+        - username: "ian.roberts"
+          custom_id: 2
+
+    - name: Make sure old users do not have consumer entries
+      kong_consumer: 
+        kong_admin_uri: "{{kong_admin_base_url}}"
+        username: "{{item}}"  
+        state: absent      
+      with_items: []
